@@ -1,50 +1,70 @@
 import csv
 import psycopg2
+import os
 
 try:
-    # 1. Open the secure connection to your local PostgreSQL server
+    # 1. DEFENSIVE CHECK: Verify if the source file actually exists before running
+    file_path = 'students_data.csv'
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The input document '{file_path}' was not found in this folder.")
+
+    # 2. Establish connection to your database server
     connection = psycopg2.connect(
         host="localhost",
         database="postgres",
         user="postgres",
-        password="Fridaous@123"  # Kept your database password from the image
+        password="Fridaous@123"  # Testing incorrect password
     )
     cursor = connection.cursor()
 
-    # 2. Read the external data document
-    print("Opening file data source...")
-    with open('students_data.csv', mode='r') as file:
+    print("Opening file data source safely...")
+    with open(file_path, mode='r') as file:
         csv_reader = csv.DictReader(file)
         
-        # 3. Loop through every single row inside the spreadsheet automatically
         for row in csv_reader:
-            # Clean up the trailing empty spaces using .strip()
             clean_name = row['fullname'].strip()
             course = row['course_name'].strip()
             
-            print(f"Processing: {clean_name} -> {course}")
-            
-            # 4. Fetch the matching parent Course ID dynamically from your catalog
             cursor.execute("SELECT course_id FROM courses WHERE course_name = %s;", (course,))
             course_result = cursor.fetchone()
             
             if course_result:
-                course_id = course_result[0]
-                
-                # 5. Load the clean record straight into your student database table layout
+                course_id = course_result
                 cursor.execute("""
                     INSERT INTO kwasu_students (fullname, assigned_course_id) 
                     VALUES (%s, %s);
                 """, (clean_name, course_id))
             else:
-                print(f"Skipping {clean_name}: Course '{course}' does not exist in master catalog.")
+                print(f"⚠️ Warning: Skipping '{clean_name}'. Course '{course}' does not exist.")
 
-    # 6. Save all the bulk injections permanently to your server layout
     connection.commit()
-    print("\nBulk file automation completed successfully!")
+    print("🚀 Ingestion workflow finished successfully!")
 
-    cursor.close()
-    connection.close()
+# =====================================================================
+# UPDATED COMPATIBLE FAULT-TOLERANCE BLOCKS
+# =====================================================================
+except FileNotFoundError as file_error:
+    print(f"\n❌ FILE TRACKING ERROR: {file_error}")
+    print("💡 Fix: Make sure 'students_data.csv' is saved in this exact folder.")
 
-except Exception as error:
-    print(f"Pipeline Automation Failed: {error}")
+except psycopg2.OperationalError as db_error:
+    # This block now beautifully catches both wrong passwords and server connection drops!
+    error_msg = str(db_error)
+    print("\n❌ DATABASE CONNECTION OR ACCESS ERROR")
+    if "password authentication failed" in error_msg:
+        print("🔒 Security Access Denied: Your database password is incorrect.")
+    else:
+        print(f"📡 Connection Failure: Cannot reach your database server. Details: {db_error}")
+    print("💡 Fix: Check your database password or make sure pgAdmin 4 is running.")
+
+except Exception as unexpected_error:
+    print(f"\n❌ UNEXPECTED CRASH CAUGHT: {unexpected_error}")
+
+# =====================================================================
+# THE CLEANUP BLOCK
+# =====================================================================
+finally:
+    if 'connection' in locals() and connection is not None:
+        cursor.close()
+        connection.close()
+        print("🔒 Database server connection closed cleanly by fallback handler.")
