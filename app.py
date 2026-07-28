@@ -1,70 +1,48 @@
-import csv
 import psycopg2
-import os
 
 try:
-    # 1. DEFENSIVE CHECK: Verify if the source file actually exists before running
-    file_path = 'students_data.csv'
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The input document '{file_path}' was not found in this folder.")
-
-    # 2. Establish connection to your database server
+    # 1. Establish secure server link
     connection = psycopg2.connect(
         host="localhost",
         database="postgres",
         user="postgres",
-        password="Fridaous@123"  # Testing incorrect password
+        password="Fridaous@123"
     )
     cursor = connection.cursor()
 
-    print("Opening file data source safely...")
-    with open(file_path, mode='r') as file:
-        csv_reader = csv.DictReader(file)
+    # 2. Run the Aggregated Metrics Report
+    reporting_query = """
+    SELECT 
+        courses.course_name,
+        COUNT(kwasu_students.student_id) AS total_enrolled_students
+    FROM kwasu_students
+    INNER JOIN courses 
+        ON kwasu_students.assigned_course_id = courses.course_id
+    GROUP BY courses.course_name
+    HAVING COUNT(kwasu_students.student_id) > 2;
+    """
+    
+    print("Running Live Enrollment Metrics Report...")
+    cursor.execute(reporting_query)
+    report_rows = cursor.fetchall()
+
+    # 3. Print out clean Executive Business Intelligence Analytics
+    print("\n=======================================================")
+    print("       KWASU EXECUTIVE BUSINESS METRICS LOG            ")
+    print("=======================================================")
+    for record in report_rows:
+        course_name = record[0]
+        enrollment_count = record[1]
         
-        for row in csv_reader:
-            clean_name = row['fullname'].strip()
-            course = row['course_name'].strip()
-            
-            cursor.execute("SELECT course_id FROM courses WHERE course_name = %s;", (course,))
-            course_result = cursor.fetchone()
-            
-            if course_result:
-                course_id = course_result
-                cursor.execute("""
-                    INSERT INTO kwasu_students (fullname, assigned_course_id) 
-                    VALUES (%s, %s);
-                """, (clean_name, course_id))
-            else:
-                print(f"⚠️ Warning: Skipping '{clean_name}'. Course '{course}' does not exist.")
+        print(f"📊 TRACK:  {course_name.upper()}")
+        print(f"👥 METRIC: {enrollment_count} Active Enrolled Students")
+        print("-------------------------------------------------------")
+    print("Report compiled successfully by pipeline core.\n")
 
-    connection.commit()
-    print("🚀 Ingestion workflow finished successfully!")
-
-# =====================================================================
-# UPDATED COMPATIBLE FAULT-TOLERANCE BLOCKS
-# =====================================================================
-except FileNotFoundError as file_error:
-    print(f"\n❌ FILE TRACKING ERROR: {file_error}")
-    print("💡 Fix: Make sure 'students_data.csv' is saved in this exact folder.")
+    cursor.close()
+    connection.close()
 
 except psycopg2.OperationalError as db_error:
-    # This block now beautifully catches both wrong passwords and server connection drops!
-    error_msg = str(db_error)
-    print("\n❌ DATABASE CONNECTION OR ACCESS ERROR")
-    if "password authentication failed" in error_msg:
-        print("🔒 Security Access Denied: Your database password is incorrect.")
-    else:
-        print(f"📡 Connection Failure: Cannot reach your database server. Details: {db_error}")
-    print("💡 Fix: Check your database password or make sure pgAdmin 4 is running.")
-
-except Exception as unexpected_error:
-    print(f"\n❌ UNEXPECTED CRASH CAUGHT: {unexpected_error}")
-
-# =====================================================================
-# THE CLEANUP BLOCK
-# =====================================================================
-finally:
-    if 'connection' in locals() and connection is not None:
-        cursor.close()
-        connection.close()
-        print("🔒 Database server connection closed cleanly by fallback handler.")
+    print(f"\n❌ PIPELINE DATABASE CONNECTION FAILURE: {db_error}")
+except Exception as general_error:
+    print(f"\n❌ METRIC EXTRACTION CRASHED: {general_error}")
